@@ -4,6 +4,16 @@ import qualified Data.ByteString.Char8 as B
 import qualified System.Environment as Env
 import qualified System.Exit as Exit
 
+data Word = Word { l1 :: Char
+                 , l2 :: Char
+                 , l3 :: Char
+                 , l4 :: Char
+                 , l5 :: Char } | BadGuess deriving Eq
+
+data Guess = Guess { green :: [(Int, Char)]
+                   , yellow :: [Char]} deriving Eq
+
+
 main :: IO ()
 main = do
    a <- Env.getArgs
@@ -13,19 +23,40 @@ main = do
    else do
       let file_name:_ = a
       f <- B.readFile file_name
-      print (Map.findWithDefault Set.empty 'a' ((buildMaps . getValidWords . B.words) f !! 4))
+      print ((possibleWords (Guess [(0, 'a')] ['z']) . getValidWords . B.words) f)
 
-getValidWords:: [B.ByteString] -> [B.ByteString]
-getValidWords = filter (\x -> B.length x == 5)
+{- 
+Converts a ByteString to data Word. (Currently Not Using)
+-}
+buildWord:: B.ByteString -> Main.Word
+buildWord x
+    | B.length x == 5  = Main.Word (B.index x 0) (B.index x 1) (B.index x 2) (B.index x 3) (B.index x 4)
+    | otherwise = Main.BadGuess
 
-buildMap:: [Char] -> [B.ByteString] -> Map.Map Char (Set.Set B.ByteString)
-buildMap k x = Map.fromListWith Set.union l
-    where l = zip k (map Set.singleton x)
+{-
+Converts a set of ByteStrings to a Set of words of length = 5.
+-}
+getValidWords:: [B.ByteString] -> Set.Set B.ByteString
+getValidWords = Set.fromList . filter (\x -> B.length x == 5)
 
-buildMapsHelper:: [B.ByteString] -> [B.ByteString] ->[Map.Map Char (Set.Set B.ByteString)]
-buildMapsHelper k x
-    | B.length (head k) == 0  = []
-    | otherwise = buildMap (map B.head k) x : buildMapsHelper (map B.tail k) x
+{-
+Takes an array of (index, character) and a Set of ByteString. Filters the Set to only include words that
+contain character at index.
+-}
+matchGreens:: [(Int, Char)] -> Set.Set B.ByteString ->Set.Set B.ByteString
+matchGreens [] w = w
+matchGreens ((i,c):xs) w = Set.intersection (Set.filter (\x -> B.index x i == c) w) (matchGreens xs w)
 
-buildMaps:: [B.ByteString] ->[Map.Map Char (Set.Set B.ByteString)]
-buildMaps x = buildMapsHelper x x
+{-
+Takes an array of characters and a Set of ByteString. Filters the Set to only include words that
+include all characters.
+-}
+matchYellows:: [Char] -> Set.Set B.ByteString -> Set.Set B.ByteString
+matchYellows [] w = w
+matchYellows (x:xs) w = Set.intersection (Set.filter (B.elem x) w) (matchYellows xs w)
+
+{-
+Takes a guess and returns a Set of valid possible words.
+-}
+possibleWords:: Main.Guess -> Set.Set B.ByteString -> Set.Set B.ByteString
+possibleWords g w = Set.intersection (matchGreens (green g) w) (matchYellows (yellow g) w) 
