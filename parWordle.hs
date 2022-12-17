@@ -11,7 +11,8 @@ data Word = Word { l1 :: Char
                  , l5 :: Char } | BadGuess deriving Eq
 
 data Guess = Guess { green :: [(Int, Char)]
-                   , yellow :: [Char]} deriving Eq
+                   , yellow :: [Char],
+                   grey :: [Char] } deriving Eq
 
 
 main :: IO ()
@@ -23,7 +24,7 @@ main = do
    else do
       let file_name:_ = a
       f <- B.readFile file_name
-      print ((possibleWords (Guess [(0, 'a')] ['z']) . getValidWords . B.words) f)
+      print ((possibleWords (Guess [(0, 'a')] ['p'] ['i']) . getValidWords . B.words) f)
 
 {- 
 Converts a ByteString to data Word. (Currently Not Using)
@@ -56,7 +57,15 @@ matchYellows [] w = w
 matchYellows (x:xs) w = Set.intersection (Set.filter (B.elem x) w) (matchYellows xs w)
 
 {-
+Takes an array of characters and a Set of ByteString. Filters the Set to only include words that
+do not include any of the characters.
+-}
+matchGreys:: [Char] -> Set.Set B.ByteString -> Set.Set B.ByteString
+matchGreys [] w = w
+matchGreys (x:xs) w = Set.intersection (Set.filter (B.notElem x) w) (matchYellows xs w)
+
+{-
 Takes a guess and returns a Set of valid possible words.
 -}
 possibleWords:: Main.Guess -> Set.Set B.ByteString -> Set.Set B.ByteString
-possibleWords g w = Set.intersection (matchGreens (green g) w) (matchYellows (yellow g) w) 
+possibleWords g w = Set.intersection (Set.intersection (matchGreens (green g) w) (matchYellows (yellow g) w)) (matchGreys (grey g) w)
