@@ -69,3 +69,13 @@ Takes a guess and returns a Set of valid possible words.
 -}
 possibleWords:: Main.Guess -> Set.Set B.ByteString -> Set.Set B.ByteString
 possibleWords g w = Set.intersection (Set.intersection (matchGreens (green g) w) (matchYellows (yellow g) w)) (matchGreys (grey g) w)
+
+getYellowsHelper:: Int -> B.ByteString -> B.ByteString -> [(Int, Char)]
+getYellowsHelper pos g a 
+   | g == B.empty = []
+   | B.head g `B.elem` a = (pos, B.head g): getYellowsHelper (pos+1) (B.tail g) a
+   | otherwise = getYellowsHelper (pos+1) (B.tail g) a
+
+getYellows:: B.ByteString -> B.ByteString -> [(Int, Char)]
+getYellows = getYellowsHelper 0
+
