@@ -1,5 +1,6 @@
 import qualified Data.Set as Set
 import qualified Data.Map as Map
+import qualified Data.Set as List
 import qualified Data.ByteString.Char8 as B
 import qualified System.Environment as Env
 import qualified System.Exit as Exit
@@ -11,30 +12,12 @@ data Word = Word { l1 :: Char
                  , l4 :: Char
                  , l5 :: Char } | BadGuess deriving Eq
 
-data Guess = Guess { green :: [(Int, Char)]
-                   , yellow :: [(Int, Char)],
-                   grey :: [Char] } deriving Eq
+data Knowledge = Knowledge { green :: Set.Set (Int, Char)
+                   , yellow :: Set.Set (Int, Char),
+                   grey :: Set.Set Char } deriving (Eq, Ord, Show)
 
 initKnowledge :: Knowledge
 initKnowledge = Knowledge Set.empty Set.empty Set.empty
-
--- main :: IO ()
--- main = do
---    a <- Env.getArgs
---    if length a /= 2 then do
---       n <- Env.getProgName
---       Exit.die $ "Usage: " ++ n ++ " <filename>"
---    else do
---       let file_name:ans:_ = a
---       f <- B.readFile file_name
---       let p = (getValidWords . B.words) f
---           g = B.pack "crane"
---           k = initKnowledge
---           w = B.pack ans
---       print $ Set.size (possibleWords k p)
---       let new_k = addToKnowledge k g w
---       print $ Set.size (possibleWords new_k p)
-
 
 main :: IO ()
 main = do
@@ -57,8 +40,6 @@ main = do
          play g w k p
          putStrLn "Done"
 
-
-
 play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString-> IO ()
 play g a k p = do
    let newK = addToKnowledge k g a
@@ -69,6 +50,7 @@ play g a k p = do
    else do
       print newGuess
       play newGuess a newK p
+
 
 {- 
 Converts a ByteString to data Word. (Currently Not Using)
@@ -110,15 +92,15 @@ matchYellows ((i, c):xs) w = Set.intersection (Set.intersection (Set.filter (B.e
 Takes an array of characters and a Set of ByteString. Filters the Set to only include words that
 do not include any of the characters.
 -}
-matchGreys:: [Char] -> Set.Set B.ByteString -> Set.Set B.ByteString
-matchGreys [] w = w
-matchGreys (x:xs) w = Set.intersection (Set.filter (B.notElem x) w) (matchGreys xs w)
+matchGreys:: String -> Set.Set B.ByteString -> Set.Set B.ByteString
+matchGreys xs w
+  = foldr (\ x -> Set.intersection (Set.filter (B.notElem x) w)) w xs
 
 {-
 Takes a guess and returns a Set of valid possible words.
 -}
-possibleWords:: Main.Guess -> Set.Set B.ByteString -> Set.Set B.ByteString
-possibleWords g w = Set.intersection (Set.intersection (matchGreens (green g) w) (matchYellows (yellow g) w)) (matchGreys (grey g) w)
+possibleWords:: Main.Knowledge -> Set.Set B.ByteString -> Set.Set B.ByteString
+possibleWords k w = Set.intersection (Set.intersection (matchGreens (Set.toList (green k)) w) (matchYellows (Set.toList (yellow k)) w)) (matchGreys (Set.toList (grey k)) w)
 
 getYellowsHelper:: Int -> B.ByteString -> B.ByteString -> [(Int, Char)]
 getYellowsHelper pos g a
@@ -128,14 +110,52 @@ getYellowsHelper pos g a
    where (x, y) = B.splitAt pos a
 
 
-
 -- getYellows:: B.ByteString -> B.ByteString -> [(Int, Char)]
 -- getYellows = getYellowsHelper 0
 
 getYellows :: B.ByteString -> B.ByteString -> Set.Set (Int, Char)
 getYellows g a = l `Set.difference` getGreens g a
    where s = Set.fromList $ B.unpack a
-         l = Set.fromList $ dropWhile (\x -> snd x `Set.notMember` s) ([0..] `zip` B.unpack g)
+         l = Set.fromList $ filter (\x -> snd x `Set.member` s) ([0..] `zip` B.unpack g)
+
 getGreens:: B.ByteString -> B.ByteString -> Set.Set (Int, Char)
 getGreens g a = Set.fromList ([0..] `zip` B.unpack g) `Set.intersection` Set.fromList ([0..] `zip` B.unpack a)
+
+getGreys:: B.ByteString -> B.ByteString -> Set.Set Char
+getGreys g a = s `Set.difference` ng
+   where s = Set.fromList $ B.unpack g
+         ng = Set.map snd (getGreens g a) `Set.union` Set.map snd (getYellows g a)
+
+addToKnowledge :: Knowledge -> B.ByteString -> B.ByteString -> Knowledge
+addToKnowledge k g a = Knowledge greens yellows greys
+   where greens = green k `Set.union` getGreens g a
+         yellows = yellow k `Set.union` getYellows g a
+         greys = grey k `Set.union` getGreys g a
+
+{-
+g is the guess, w is the set of possible words at this point
+-}
+
+count :: Ord a => [a] -> Map.Map a Float
+count = Map.fromListWith (+) . (`zip` repeat 1)
+
+entropy :: B.ByteString -> Set.Set B.ByteString -> Knowledge -> Float
+entropy g w k = Map.foldl (+) 0 $ Map.unionWith (*) p inf
+   where s = fromIntegral (length w)
+         p = Map.map (/s) $ count (map (addToKnowledge k g) (Set.toList w))
+         inf = Map.map (\x ->logBase 2 (1/x)) p
+
+entropies :: Set.Set B.ByteString -> Knowledge -> [(B.ByteString, Float)]
+entropies w k = e_list
+   where w_list = Set.toList w
+         e_list = map (\x -> (x, entropy x w k)) w_list
+
+maxEntropyHelper :: (B.ByteString, Float) -> [(B.ByteString, Float)] -> (B.ByteString, Float) 
+maxEntropyHelper m []  = m
+maxEntropyHelper (max_guess, max_entropy) ((guess, entropy):xs)
+   | entropy > max_entropy = maxEntropyHelper (guess, entropy) xs
+   | otherwise = maxEntropyHelper (max_guess, max_entropy) xs
+
+maxEntropy :: Set.Set B.ByteString -> Knowledge ->  (B.ByteString, Float) 
+maxEntropy w k = maxEntropyHelper (B.empty, 0) (entropies w k)
 
