@@ -1,5 +1,6 @@
 import qualified Data.Set as Set
 import qualified Data.Map as Map
+import qualified Data.Set as List
 import qualified Data.ByteString.Char8 as B
 import qualified System.Environment as Env
 import qualified System.Exit as Exit
@@ -12,7 +13,7 @@ data Word = Word { l1 :: Char
 
 data Knowledge = Knowledge { green :: Set.Set (Int, Char)
                    , yellow :: Set.Set (Int, Char),
-                   grey :: Set.Set Char } deriving Eq
+                   grey :: Set.Set Char } deriving (Eq, Ord, Show)
 
 initKnowledge :: Knowledge
 initKnowledge = Knowledge Set.empty Set.empty Set.empty
@@ -108,4 +109,31 @@ addToKnowledge k g a = Knowledge greens yellows greys
    where greens = green k `Set.union` getGreens g a
          yellows = yellow k `Set.union` getYellows g a
          greys = grey k `Set.union` getGreys g a
-   
+
+{-
+g is the guess, w is the set of possible words at this point
+-}
+
+count :: Ord a => [a] -> Map.Map a Float
+count = Map.fromListWith (+) . (`zip` repeat 1)
+
+entropy :: B.ByteString -> Set.Set B.ByteString -> Knowledge -> Float
+entropy g w k = Map.foldl (+) 0 $ Map.unionWith (*) p inf
+   where s = fromIntegral (length w)
+         p = Map.map (/s) $ count (map (addToKnowledge k g) (Set.toList w))
+         inf = Map.map (\x ->logBase 2 (1/x)) p
+
+entropies :: Set.Set B.ByteString -> Knowledge -> [(B.ByteString, Float)]
+entropies w k = e_list
+   where w_list = Set.toList w
+         e_list = map (\x -> (x, entropy x w k)) w_list
+
+maxEntropyHelper :: (B.ByteString, Float) -> [(B.ByteString, Float)] -> (B.ByteString, Float) 
+maxEntropyHelper m []  = m
+maxEntropyHelper (max_guess, max_entropy) ((guess, entropy):xs)
+   | entropy > max_entropy = maxEntropyHelper (guess, entropy) xs
+   | otherwise = maxEntropyHelper (max_guess, max_entropy) xs
+
+maxEntropy :: Set.Set B.ByteString -> Knowledge ->  (B.ByteString, Float) 
+maxEntropy w k = maxEntropyHelper (B.empty, 0) (entropies w k)
+
