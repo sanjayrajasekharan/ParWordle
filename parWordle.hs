@@ -15,6 +15,26 @@ data Guess = Guess { green :: [(Int, Char)]
                    , yellow :: [(Int, Char)],
                    grey :: [Char] } deriving Eq
 
+initKnowledge :: Knowledge
+initKnowledge = Knowledge Set.empty Set.empty Set.empty
+
+-- main :: IO ()
+-- main = do
+--    a <- Env.getArgs
+--    if length a /= 2 then do
+--       n <- Env.getProgName
+--       Exit.die $ "Usage: " ++ n ++ " <filename>"
+--    else do
+--       let file_name:ans:_ = a
+--       f <- B.readFile file_name
+--       let p = (getValidWords . B.words) f
+--           g = B.pack "crane"
+--           k = initKnowledge
+--           w = B.pack ans
+--       print $ Set.size (possibleWords k p)
+--       let new_k = addToKnowledge k g w
+--       print $ Set.size (possibleWords new_k p)
+
 
 main :: IO ()
 main = do
@@ -23,9 +43,6 @@ main = do
       n <- Env.getProgName
       Exit.die $ "Usage: " ++ n ++ "<initialGuess> <answer> <filename>"
    else do
-      -- let file_name:_ = a
-      -- f <- B.readFile file_name
-      -- print ((possibleWords (Guess [(2, 'o'), (0, 'c'), (1, 'h')] [(0, 'o'), (1, 'c'), (3, 'c'), (4, 'r')] ['e', 'a', 'n', 'b', 'l', 'k', 'i']) . getValidWords . B.words) f)
       let guess = head a
       let answer = a !! 1
       if length guess /= 5 || length answer /= 5 then do
@@ -33,28 +50,25 @@ main = do
       else do
          let file_name = a !! 2
          f <- B.readFile file_name
-         print (scoreWord (B.pack guess) (B.pack answer))
-         let wordSet = possibleWords (scoreWord (B.pack guess) (B.pack answer))
+         let p = (getValidWords . B.words) f
+             k = initKnowledge
+             g = B.pack guess
+             w = B.pack answer
+         play g w k p
+         putStrLn "Done"
 
-play :: B.ByteString -> B.ByteString -> IO ()
-play g a = do
-   let wordSet = possibleWords (addToKnowledge (B.pack guess) (B.pack answer))
-   let newGuess = head wordSet --this will be where we have to do minimax
+
+
+play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString-> IO ()
+play g a k p = do
+   let newK = addToKnowledge k g a
+   let wordSet = possibleWords newK p
+   let newGuess = Set.elemAt 0 wordSet --this will be where we have to do minimax
    if newGuess == a then do
       print "Word Found!"
    else do
-      play newGuess a
-
-
-
-
-
-scoreWord :: B.ByteString -> B.ByteString -> [(Set.Set (Int, Char), Set.Set (Int, Char))]
-scoreWord guess ans = [(green, yellow)]
-   where green = getGreens guess ans
-         yellow = getYellows guess ans
-   
-
+      print newGuess
+      play newGuess a newK p
 
 {- 
 Converts a ByteString to data Word. (Currently Not Using)
