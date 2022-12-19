@@ -3,6 +3,7 @@ import qualified Data.Map as Map
 import qualified Data.ByteString.Char8 as B
 import qualified System.Environment as Env
 import qualified System.Exit as Exit
+import Data.Map (elemAt)
 
 data Word = Word { l1 :: Char
                  , l2 :: Char
@@ -33,6 +34,20 @@ main = do
          let file_name = a !! 2
          f <- B.readFile file_name
          print (scoreWord (B.pack guess) (B.pack answer))
+         let wordSet = possibleWords (scoreWord (B.pack guess) (B.pack answer))
+
+play :: B.ByteString -> B.ByteString -> IO ()
+play g a = do
+   let wordSet = possibleWords (addToKnowledge (B.pack guess) (B.pack answer))
+   let newGuess = head wordSet --this will be where we have to do minimax
+   if newGuess == a then do
+      print "Word Found!"
+   else do
+      play newGuess a
+
+
+
+
 
 scoreWord :: B.ByteString -> B.ByteString -> [(Set.Set (Int, Char), Set.Set (Int, Char))]
 scoreWord guess ans = [(green, yellow)]
@@ -59,10 +74,16 @@ getValidWords = Set.fromList . filter (\x -> B.length x == 5)
 Takes an array of (index, character) and a Set of ByteString. Filters the Set to only include words that
 contain character at index.
 -}
-matchGreens:: [(Int, Char)] -> Set.Set B.ByteString ->Set.Set B.ByteString
-matchGreens [] w = w
-matchGreens ((i,c):xs) w = Set.intersection (Set.filter (\x -> B.index x i == c) w) (matchGreens xs w)
+matchGreens:: Set.Set (Int, Char) -> Set.Set B.ByteString ->Set.Set B.ByteString
+matchGreens set w
+   | set == Set.null = w
+   | otherwise = Set.intersection (Set.filter (\x -> B.index x (set.elemAt 0) == (set.elemAt 1)) w) (matchGreens newSet w)
+   where newSet = snd (Set.splitAt 2)
 
+
+-- matchGreens:: [(Int, Char)] -> Set.Set B.ByteString ->Set.Set B.ByteString
+-- matchGreens [] w = w
+-- matchGreens ((i,c):xs) w = Set.intersection (Set.filter (\x -> B.index x i == c) w) (matchGreens xs w)
 {-
 Takes an array of characters and a Set of ByteString. Filters the Set to only include words that
 include all characters.
