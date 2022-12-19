@@ -10,21 +10,30 @@ data Word = Word { l1 :: Char
                  , l4 :: Char
                  , l5 :: Char } | BadGuess deriving Eq
 
-data Guess = Guess { green :: [(Int, Char)]
-                   , yellow :: [(Int, Char)],
-                   grey :: [Char] } deriving Eq
+data Knowledge = Knowledge { green :: Set.Set (Int, Char)
+                   , yellow :: Set.Set (Int, Char),
+                   grey :: Set.Set Char } deriving Eq
 
+initKnowledge :: Knowledge
+initKnowledge = Knowledge Set.empty Set.empty Set.empty
 
 main :: IO ()
 main = do
    a <- Env.getArgs
-   if length a /= 1 then do
+   if length a /= 2 then do
       n <- Env.getProgName
       Exit.die $ "Usage: " ++ n ++ " <filename>"
    else do
-      let file_name:_ = a
+      let file_name:ans:_ = a
       f <- B.readFile file_name
-      print ((possibleWords (Guess [(2, 'o'), (0, 'c'), (1, 'h')] [(0, 'o'), (1, 'c'), (3, 'c'), (4, 'r')] ['e', 'a', 'n', 'b', 'l', 'k', 'i']) . getValidWords . B.words) f)
+      let p = (getValidWords . B.words) f
+          g = B.pack "crane"
+          k = initKnowledge
+          w = B.pack ans
+      print $ Set.size (possibleWords k p)
+      let new_k = addToKnowledge k g w
+      print $ Set.size (possibleWords new_k p)
+
 
 {- 
 Converts a ByteString to data Word. (Currently Not Using)
@@ -60,15 +69,15 @@ matchYellows ((i, c):xs) w = Set.intersection (Set.intersection (Set.filter (B.e
 Takes an array of characters and a Set of ByteString. Filters the Set to only include words that
 do not include any of the characters.
 -}
-matchGreys:: [Char] -> Set.Set B.ByteString -> Set.Set B.ByteString
-matchGreys [] w = w
-matchGreys (x:xs) w = Set.intersection (Set.filter (B.notElem x) w) (matchGreys xs w)
+matchGreys:: String -> Set.Set B.ByteString -> Set.Set B.ByteString
+matchGreys xs w
+  = foldr (\ x -> Set.intersection (Set.filter (B.notElem x) w)) w xs
 
 {-
 Takes a guess and returns a Set of valid possible words.
 -}
-possibleWords:: Main.Guess -> Set.Set B.ByteString -> Set.Set B.ByteString
-possibleWords g w = Set.intersection (Set.intersection (matchGreens (green g) w) (matchYellows (yellow g) w)) (matchGreys (grey g) w)
+possibleWords:: Main.Knowledge -> Set.Set B.ByteString -> Set.Set B.ByteString
+possibleWords k w = Set.intersection (Set.intersection (matchGreens (Set.toList (green k)) w) (matchYellows (Set.toList (yellow k)) w)) (matchGreys (Set.toList (grey k)) w)
 
 getYellowsHelper:: Int -> B.ByteString -> B.ByteString -> [(Int, Char)]
 getYellowsHelper pos g a
@@ -78,14 +87,25 @@ getYellowsHelper pos g a
    where (x, y) = B.splitAt pos a
 
 
-
 -- getYellows:: B.ByteString -> B.ByteString -> [(Int, Char)]
 -- getYellows = getYellowsHelper 0
 
 getYellows :: B.ByteString -> B.ByteString -> Set.Set (Int, Char)
 getYellows g a = l `Set.difference` getGreens g a
    where s = Set.fromList $ B.unpack a
-         l = Set.fromList $ dropWhile (\x -> snd x `Set.notMember` s) ([0..] `zip` B.unpack g)
+         l = Set.fromList $ filter (\x -> snd x `Set.member` s) ([0..] `zip` B.unpack g)
+
 getGreens:: B.ByteString -> B.ByteString -> Set.Set (Int, Char)
 getGreens g a = Set.fromList ([0..] `zip` B.unpack g) `Set.intersection` Set.fromList ([0..] `zip` B.unpack a)
 
+getGreys:: B.ByteString -> B.ByteString -> Set.Set Char
+getGreys g a = s `Set.difference` ng
+   where s = Set.fromList $ B.unpack g
+         ng = Set.map snd (getGreens g a) `Set.union` Set.map snd (getYellows g a)
+
+addToKnowledge :: Knowledge -> B.ByteString -> B.ByteString -> Knowledge
+addToKnowledge k g a = Knowledge greens yellows greys
+   where greens = green k `Set.union` getGreens g a
+         yellows = yellow k `Set.union` getYellows g a
+         greys = grey k `Set.union` getGreys g a
+   
