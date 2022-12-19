@@ -29,7 +29,7 @@ main = do
       let guess = head a
       let answer = a !! 1
       if length guess /= 5 || length answer /= 5 then do
-         Exit.die $ "Guess and Answer must be length 5"
+         Exit.die "Guess and Answer must be length 5"
       else do
          let file_name = a !! 2
          f <- B.readFile file_name
@@ -42,13 +42,14 @@ main = do
 
 play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString-> IO ()
 play g a k p = do
+   print $ B.unpack g
    let newK = addToKnowledge k g a
    let wordSet = possibleWords newK p
-   let newGuess = Set.elemAt 0 wordSet --this will be where we have to do minimax
+   let newGuess = fst $ maxEntropy wordSet newK --this will be where we have to do minimax
    if newGuess == a then do
+      print $ B.unpack newGuess
       print "Word Found!"
    else do
-      print newGuess
       play newGuess a newK p
 
 
@@ -70,16 +71,17 @@ getValidWords = Set.fromList . filter (\x -> B.length x == 5)
 Takes an array of (index, character) and a Set of ByteString. Filters the Set to only include words that
 contain character at index.
 -}
-matchGreens:: Set.Set (Int, Char) -> Set.Set B.ByteString ->Set.Set B.ByteString
-matchGreens set w
-   | set == Set.null = w
-   | otherwise = Set.intersection (Set.filter (\x -> B.index x (set.elemAt 0) == (set.elemAt 1)) w) (matchGreens newSet w)
-   where newSet = snd (Set.splitAt 2)
+-- matchGreens:: Set.Set (Int, Char) -> Set.Set B.ByteString ->Set.Set B.ByteString
+-- matchGreens set w
+--    | set == Set.null = w
+--    | otherwise = Set.intersection (Set.filter (\x -> B.index x (set.elemAt 0) == (set.elemAt 1)) w) (matchGreens newSet w)
+--    where newSet = snd (Set.splitAt 2)
 
 
--- matchGreens:: [(Int, Char)] -> Set.Set B.ByteString ->Set.Set B.ByteString
--- matchGreens [] w = w
--- matchGreens ((i,c):xs) w = Set.intersection (Set.filter (\x -> B.index x i == c) w) (matchGreens xs w)
+matchGreens:: [(Int, Char)] -> Set.Set B.ByteString ->Set.Set B.ByteString
+matchGreens [] w = w
+matchGreens ((i,c):xs) w = Set.intersection (Set.filter (\x -> B.index x i == c) w) (matchGreens xs w)
+
 {-
 Takes an array of characters and a Set of ByteString. Filters the Set to only include words that
 include all characters.
@@ -152,10 +154,10 @@ entropies w k = e_list
 
 maxEntropyHelper :: (B.ByteString, Float) -> [(B.ByteString, Float)] -> (B.ByteString, Float) 
 maxEntropyHelper m []  = m
-maxEntropyHelper (max_guess, max_entropy) ((guess, entropy):xs)
-   | entropy > max_entropy = maxEntropyHelper (guess, entropy) xs
-   | otherwise = maxEntropyHelper (max_guess, max_entropy) xs
+maxEntropyHelper (max_guess, max_entr) ((guess, entr):xs)
+   | entr > max_entr = maxEntropyHelper (guess, entr) xs
+   | otherwise = maxEntropyHelper (max_guess, max_entr) xs
 
 maxEntropy :: Set.Set B.ByteString -> Knowledge ->  (B.ByteString, Float) 
-maxEntropy w k = maxEntropyHelper (B.empty, 0) (entropies w k)
+maxEntropy w k = maxEntropyHelper (B.empty, -1) (entropies w k)
 
