@@ -29,7 +29,7 @@ main = do
       let guess = head a
       let answer = a !! 1
       if length guess /= 5 || length answer /= 5 then do
-         Exit.die $ "Guess and Answer must be length 5"
+         Exit.die "Guess and Answer must be length 5"
       else do
          let file_name = a !! 2
          f <- B.readFile file_name
@@ -37,20 +37,32 @@ main = do
              k = initKnowledge
              g = B.pack guess
              w = B.pack answer
-         play g w k p
-         putStrLn "Done"
+         let wordList = Set.toList p
+         print (length wordList)
+         let countList = map (\x -> play g x k p 1) wordList
+         let avg = (sum countList) `div` (length countList)
+         print avg
 
-play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString-> IO ()
-play g a k p = do
-   let newK = addToKnowledge k g a
-   let wordSet = possibleWords newK p
-   let newGuess = Set.elemAt 0 wordSet --this will be where we have to do minimax
-   if newGuess == a then do
-      print "Word Found!"
-   else do
-      print newGuess
-      play newGuess a newK p
+-- play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString-> IO ()
+-- play g a k p = do
+--    print $ B.unpack g
+--    let newK = addToKnowledge k g a
+--    let wordSet = possibleWords newK p
+--    let newGuess = fst $ maxEntropy wordSet newK --this will be where we have to do minimax
+--    if newGuess == a then do
+--       print $ B.unpack newGuess
+--       print "Word Found!"
+--    else do
+--       play newGuess a newK p
 
+play :: B.ByteString -> B.ByteString -> Knowledge -> List.Set B.ByteString -> Int -> Int
+play g a k p count
+   | newGuess == a = count + 1
+   | otherwise = play newGuess a newK p newCount
+   where newK = addToKnowledge k g a
+         wordSet = possibleWords newK p
+         newGuess = fst $ maxEntropy wordSet newK
+         newCount = count + 1
 
 {- 
 Converts a ByteString to data Word. (Currently Not Using)
@@ -70,16 +82,17 @@ getValidWords = Set.fromList . filter (\x -> B.length x == 5)
 Takes an array of (index, character) and a Set of ByteString. Filters the Set to only include words that
 contain character at index.
 -}
-matchGreens:: Set.Set (Int, Char) -> Set.Set B.ByteString ->Set.Set B.ByteString
-matchGreens set w
-   | set == Set.null = w
-   | otherwise = Set.intersection (Set.filter (\x -> B.index x (set.elemAt 0) == (set.elemAt 1)) w) (matchGreens newSet w)
-   where newSet = snd (Set.splitAt 2)
+-- matchGreens:: Set.Set (Int, Char) -> Set.Set B.ByteString ->Set.Set B.ByteString
+-- matchGreens set w
+--    | set == Set.null = w
+--    | otherwise = Set.intersection (Set.filter (\x -> B.index x (set.elemAt 0) == (set.elemAt 1)) w) (matchGreens newSet w)
+--    where newSet = snd (Set.splitAt 2)
 
 
--- matchGreens:: [(Int, Char)] -> Set.Set B.ByteString ->Set.Set B.ByteString
--- matchGreens [] w = w
--- matchGreens ((i,c):xs) w = Set.intersection (Set.filter (\x -> B.index x i == c) w) (matchGreens xs w)
+matchGreens:: [(Int, Char)] -> Set.Set B.ByteString ->Set.Set B.ByteString
+matchGreens [] w = w
+matchGreens ((i,c):xs) w = Set.intersection (Set.filter (\x -> B.index x i == c) w) (matchGreens xs w)
+
 {-
 Takes an array of characters and a Set of ByteString. Filters the Set to only include words that
 include all characters.
@@ -150,12 +163,11 @@ entropies w k = e_list
    where w_list = Set.toList w
          e_list = map (\x -> (x, entropy x w k)) w_list
 
-maxEntropyHelper :: (B.ByteString, Float) -> [(B.ByteString, Float)] -> (B.ByteString, Float) 
+maxEntropyHelper :: (B.ByteString, Float) -> [(B.ByteString, Float)] -> (B.ByteString, Float)
 maxEntropyHelper m []  = m
-maxEntropyHelper (max_guess, max_entropy) ((guess, entropy):xs)
-   | entropy > max_entropy = maxEntropyHelper (guess, entropy) xs
-   | otherwise = maxEntropyHelper (max_guess, max_entropy) xs
+maxEntropyHelper (max_guess, max_entr) ((guess, entr):xs)
+   | entr > max_entr = maxEntropyHelper (guess, entr) xs
+   | otherwise = maxEntropyHelper (max_guess, max_entr) xs
 
-maxEntropy :: Set.Set B.ByteString -> Knowledge ->  (B.ByteString, Float) 
-maxEntropy w k = maxEntropyHelper (B.empty, 0) (entropies w k)
-
+maxEntropy :: Set.Set B.ByteString -> Knowledge ->  (B.ByteString, Float)
+maxEntropy w k = maxEntropyHelper (B.empty, -1) (entropies w k)
