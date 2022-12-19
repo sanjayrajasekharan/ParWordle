@@ -71,11 +71,21 @@ possibleWords:: Main.Guess -> Set.Set B.ByteString -> Set.Set B.ByteString
 possibleWords g w = Set.intersection (Set.intersection (matchGreens (green g) w) (matchYellows (yellow g) w)) (matchGreys (grey g) w)
 
 getYellowsHelper:: Int -> B.ByteString -> B.ByteString -> [(Int, Char)]
-getYellowsHelper pos g a 
+getYellowsHelper pos g a
    | g == B.empty = []
-   | B.head g `B.elem` a = (pos, B.head g): getYellowsHelper (pos+1) (B.tail g) a
+   | B.head g `B.elem` (x `B.append` B.tail y) = (pos, B.head g): getYellowsHelper (pos+1) (B.tail g) a
    | otherwise = getYellowsHelper (pos+1) (B.tail g) a
+   where (x, y) = B.splitAt pos a
 
-getYellows:: B.ByteString -> B.ByteString -> [(Int, Char)]
-getYellows = getYellowsHelper 0
+
+
+-- getYellows:: B.ByteString -> B.ByteString -> [(Int, Char)]
+-- getYellows = getYellowsHelper 0
+
+getYellows :: B.ByteString -> B.ByteString -> Set.Set (Int, Char)
+getYellows g a = l `Set.difference` getGreens g a
+   where s = Set.fromList $ B.unpack a
+         l = Set.fromList $ dropWhile (\x -> snd x `Set.notMember` s) ([0..] `zip` B.unpack g)
+getGreens:: B.ByteString -> B.ByteString -> Set.Set (Int, Char)
+getGreens g a = Set.fromList ([0..] `zip` B.unpack g) `Set.intersection` Set.fromList ([0..] `zip` B.unpack a)
 
