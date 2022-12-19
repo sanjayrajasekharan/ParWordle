@@ -18,13 +18,28 @@ data Guess = Guess { green :: [(Int, Char)]
 main :: IO ()
 main = do
    a <- Env.getArgs
-   if length a /= 1 then do
+   if length a /= 3 then do
       n <- Env.getProgName
-      Exit.die $ "Usage: " ++ n ++ " <filename>"
+      Exit.die $ "Usage: " ++ n ++ "<initialGuess> <answer> <filename>"
    else do
-      let file_name:_ = a
-      f <- B.readFile file_name
-      print ((possibleWords (Guess [(2, 'o'), (0, 'c'), (1, 'h')] [(0, 'o'), (1, 'c'), (3, 'c'), (4, 'r')] ['e', 'a', 'n', 'b', 'l', 'k', 'i']) . getValidWords . B.words) f)
+      -- let file_name:_ = a
+      -- f <- B.readFile file_name
+      -- print ((possibleWords (Guess [(2, 'o'), (0, 'c'), (1, 'h')] [(0, 'o'), (1, 'c'), (3, 'c'), (4, 'r')] ['e', 'a', 'n', 'b', 'l', 'k', 'i']) . getValidWords . B.words) f)
+      let guess = head a
+      let answer = a !! 1
+      if length guess /= 5 || length answer /= 5 then do
+         Exit.die $ "Guess and Answer must be length 5"
+      else do
+         let file_name = a !! 2
+         f <- B.readFile file_name
+         print (scoreWord (B.pack guess) (B.pack answer))
+
+scoreWord :: B.ByteString -> B.ByteString -> [(Set.Set (Int, Char), Set.Set (Int, Char))]
+scoreWord guess ans = [(green, yellow)]
+   where green = getGreens guess ans
+         yellow = getYellows guess ans
+   
+
 
 {- 
 Converts a ByteString to data Word. (Currently Not Using)
