@@ -26,18 +26,16 @@ main = do
       n <- Env.getProgName
       Exit.die $ "Usage: " ++ n ++ "<initialGuess> <answer> <filename>"
    else do
-      let guess = head a
-      let answer = a !! 1
+      let (guess:answer:file_name:_) = a
       if length guess /= 5 || length answer /= 5 then do
          Exit.die "Guess and Answer must be length 5"
       else do
-         let file_name = a !! 2
          f <- B.readFile file_name
          let p = (getValidWords . B.words) f
              k = initKnowledge
              g = B.pack guess
              w = B.pack answer
-         play g w k p
+         playAll $ Set.toList p
          putStrLn "Done"
 
 play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString-> IO ()
@@ -51,6 +49,10 @@ play g a k p = do
       print "Word Found!"
    else do
       play newGuess a newK p
+
+playAll :: [B.ByteString] -> IO ()
+playAll w = mapM_ (\x-> play g x initKnowledge (Set.fromList w)) w
+   where g  = B.pack "crane"
 
 
 {- 
