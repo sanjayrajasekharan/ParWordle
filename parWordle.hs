@@ -5,6 +5,8 @@ import qualified Data.ByteString.Char8 as B
 import qualified System.Environment as Env
 import qualified System.Exit as Exit
 import Data.Map (elemAt)
+import Control.Parallel.Strategies
+
 
 data Word = Word { l1 :: Char
                  , l2 :: Char
@@ -38,9 +40,8 @@ main = do
              g = B.pack guess
              w = B.pack answer
          let wordList = Set.toList p
-         print (length wordList)
-         let countList = map (\x -> play g x k p 1) wordList
-         let avg = (sum countList) `div` (length countList)
+         let countList =  map (\x -> play g x k p 1) wordList
+         let avg = fromIntegral (sum countList) / fromIntegral (length countList)
          print avg
 
 -- play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString-> IO ()
