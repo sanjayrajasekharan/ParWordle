@@ -5,7 +5,7 @@ import qualified Data.ByteString.Char8 as B
 import qualified System.Environment as Env
 import qualified System.Exit as Exit
 import Data.Map (elemAt)
-import Control.Parallel.Strategies
+import Control.Parallel.Strategies hiding (parMap)
 
 
 data Word = Word { l1 :: Char
@@ -20,6 +20,15 @@ data Knowledge = Knowledge { green :: Set.Set (Int, Char)
 
 initKnowledge :: Knowledge
 initKnowledge = Knowledge Set.empty Set.empty Set.empty
+
+
+parMap :: (a -> b) -> [a] -> Eval [b] 
+parMap f [] = return []
+parMap f (a:as) = do
+   b <- rpar (f a) 
+   bs <- parMap f as 
+   return (b:bs)
+
 
 main :: IO ()
 main = do
@@ -40,9 +49,11 @@ main = do
              g = B.pack guess
              w = B.pack answer
          let wordList = Set.toList p
-         let countList =  map (\x -> play g x k p 1) wordList
+         let countList =  map (\x -> play g x k p 1) wordList `using` parList rseq
          let avg = fromIntegral (sum countList) / fromIntegral (length countList)
          print avg
+
+
 
 -- play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString-> IO ()
 -- play g a k p = do
@@ -162,7 +173,7 @@ entropy g w k = Map.foldl (+) 0 $ Map.unionWith (*) p inf
 entropies :: Set.Set B.ByteString -> Knowledge -> [(B.ByteString, Float)]
 entropies w k = e_list
    where w_list = Set.toList w
-         e_list = map (\x -> (x, entropy x w k)) w_list
+         e_list = map (\x -> (x, entropy x w k)) w_list `using` parListChunk 100 rdeepseq
 
 maxEntropyHelper :: (B.ByteString, Float) -> [(B.ByteString, Float)] -> (B.ByteString, Float)
 maxEntropyHelper m []  = m
