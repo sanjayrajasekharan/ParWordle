@@ -30,7 +30,7 @@ main = do
    args <- Env.getArgs
    if length args /= 3 then do
       n <- Env.getProgName
-      Exit.die $ "Usage: " ++ n ++ "<initialGuess> <guess-filename> <answer-filename>"
+      Exit.die $ "Usage: " ++ n ++ "<initialGuess> <guesses-filename> <answers-filename>"
    else do
       let startW = head args
       if length startW /= 5 then do
@@ -44,24 +44,36 @@ main = do
              ansList = Set.toList ((getValidWords . B.words) ansF)
              k = initKnowledge
              startWB = B.pack startW
-             ans = B.pack "adieu"
+             ans = B.pack "lunar"
 
          -- mapM_ (\x -> play startWB x k (Set.fromList ansList) guesses 1) ansList
-         -- let count = play startWB ans k guesses 1
-         -- print count
+         play startWB ans k guesses 1
          -- let avg = fromIntegral (sum countList) / fromIntegral (length countList)
          -- print avg
-         let countList = map (\x -> play startWB x k guesses 1) ansList
-         let avg = fromIntegral (sum countList) / fromIntegral (length countList)
-         print avg
+         -- let countList = map (\x -> play startWB x k guesses 1) ansList
+         -- let avg = fromIntegral (sum countList) / fromIntegral (length countList)
+         -- print avg
 
-play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString -> Int -> Int
-play g a k gs count
-   | g == a = count + 1
-   | otherwise = play g' a k' gs' (count+1)
-   where k' = addToKnowledge k g a
-         gs' = Set.delete g gs 
-         g' = fst $ maxEntropy gs' k'
+play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString -> Int -> IO ()
+play g a k gs count = do
+   if g == a then do
+      return ()
+   else do
+      let k' = addToKnowledge k g a
+          gs' = Set.delete g gs 
+          g' = fst $ maxEntropy gs' k'
+      print g'
+      play g' a k' gs' (count+1)
+
+-- play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString -> Int -> Int
+-- play g a k gs count
+--    | g == a = count + 1
+--    | otherwise = play g' a k' gs' (count+1)
+--    where k' = addToKnowledge k g a
+--          gs' = Set.delete g gs 
+--          g' = fst $ maxEntropy gs' k'
+
+
 
 {- 
 Converts a ByteString to data Word. (Currently Not Using)
