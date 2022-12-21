@@ -44,21 +44,21 @@ main = do
              ansList = Set.toList ((getValidWords . B.words) ansF)
              k = initKnowledge
              startWB = B.pack startW
-             ans = B.pack "slate"
+             ans = B.pack "adieu"
 
          -- mapM_ (\x -> play startWB x k (Set.fromList ansList) guesses 1) ansList
-         play startWB ans k guesses 1
+         let count = play startWB ans k guesses 1
+         print count
          -- let avg = fromIntegral (sum countList) / fromIntegral (length countList)
          -- print avg
          -- let countList =  map (\x -> play g x k p 1) wordList `using` parList rseq
          -- let avg = fromIntegral (sum countList) / fromIntegral (length countList)
          -- print avg
 
-play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString -> Int -> IO ()
+play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString -> Int -> Int
 play g a k gs count
-   | g == a = do 
-      print $ B.unpack a ++ ": " ++ show count
-   | otherwise = T.trace (show count ++ show g) play g' a k' gs' (count+1)
+   | g == a = count + 1
+   | otherwise = play g' a k' gs' (count+1)
    where k' = addToKnowledge k g a
          gs' = Set.delete g gs 
          g' = fst $ maxEntropy gs' k'
@@ -161,9 +161,8 @@ entropy g k as = Map.foldl (+) 0 $ Map.unionWith (*) p inf
 entropies :: Set.Set B.ByteString -> Knowledge -> [(B.ByteString, Float)]
 entropies gs k = e_list
    where g_list = Set.toList gs
-         as = T.trace (show (possibleWords k gs)) possibleWords k gs
-         e_list = map (\g -> (g, entropy g k as)) g_list
-         -- `using` parList rdeepseq
+         as = possibleWords k gs
+         e_list = map (\g -> (g, entropy g k as)) g_list `using` parBuffer 256 rdeepseq
 maxEntropyHelper :: (B.ByteString, Float) -> [(B.ByteString, Float)] -> (B.ByteString, Float)
 maxEntropyHelper m []  = m
 maxEntropyHelper (max_guess, max_entr) ((guess, entr):xs)
