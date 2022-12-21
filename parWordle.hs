@@ -8,14 +8,6 @@ import Data.Map (elemAt)
 import qualified Debug.Trace as T
 import Control.Parallel.Strategies
 
-
-
-data Word = Word { l1 :: Char
-                 , l2 :: Char
-                 , l3 :: Char
-                 , l4 :: Char
-                 , l5 :: Char } | BadGuess deriving Eq
-
 data Knowledge = Knowledge { green :: Set.Set (Int, Char)
                    , yellow :: Set.Set (Int, Char),
                    grey :: Set.Set Char } deriving (Eq, Ord, Show)
@@ -28,26 +20,23 @@ initKnowledge = Knowledge Set.empty Set.empty Set.empty
 main :: IO ()
 main = do
    args <- Env.getArgs
-   if length args /= 3 then do
+   if length args /= 2 then do
       n <- Env.getProgName
-      Exit.die $ "Usage: " ++ n ++ "<initialGuess> <guesses-filename> <answers-filename>"
+      Exit.die $ "Usage: " ++ n ++ "<answer> <guesses-filename>"
    else do
       let startW = head args
       if length startW /= 5 then do
          Exit.die "Starting guess must be length 5"
-      else do
-         let guessFile = args !! 1
-         let answerFile = args !! 2
+      else do 
+         let (ans:guessFile:_) = args
          guessF <- B.readFile guessFile
-         ansF <- B.readFile answerFile
          let guesses = (getValidWords . B.words) guessF
-             ansList = Set.toList ((getValidWords . B.words) ansF)
+            --  ansList = Set.toList ((getValidWords . B.words) ansF)
              k = initKnowledge
-             startWB = B.pack startW
-             ans = B.pack "lunar"
+             startWB = B.pack "raise"
+             ansB = B.pack ans
 
-         -- mapM_ (\x -> play startWB x k (Set.fromList ansList) guesses 1) ansList
-         play startWB ans k guesses 1
+         play startWB ansB k guesses 1
          -- let avg = fromIntegral (sum countList) / fromIntegral (length countList)
          -- print avg
          -- let countList = map (\x -> play startWB x k guesses 1) ansList
@@ -56,24 +45,14 @@ main = do
 
 play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString -> Int -> IO ()
 play g a k gs count = do
+   print g
    if g == a then do
-      return ()
+      print $ "Solved in " ++ show count ++ "!"
    else do
       let k' = addToKnowledge k g a
           gs' = Set.delete g gs 
           g' = fst $ maxEntropy gs' k'
-      print g'
       play g' a k' gs' (count+1)
-
--- play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString -> Int -> Int
--- play g a k gs count
---    | g == a = count + 1
---    | otherwise = play g' a k' gs' (count+1)
---    where k' = addToKnowledge k g a
---          gs' = Set.delete g gs 
---          g' = fst $ maxEntropy gs' k'
-
-
 
 {- 
 Converts a ByteString to data Word. (Currently Not Using)
@@ -93,13 +72,6 @@ getValidWords = Set.fromList . filter (\x -> B.length x == 5)
 Takes an array of (index, character) and a Set of ByteString. Filters the Set to only include words that
 contain character at index.
 -}
--- matchGreens:: Set.Set (Int, Char) -> Set.Set B.ByteString ->Set.Set B.ByteString
--- matchGreens set w
---    | set == Set.null = w
---    | otherwise = Set.intersection (Set.filter (\x -> B.index x (set.elemAt 0) == (set.elemAt 1)) w) (matchGreens newSet w)
---    where newSet = snd (Set.splitAt 2)
-
-
 matchGreens:: [(Int, Char)] -> Set.Set B.ByteString ->Set.Set B.ByteString
 matchGreens [] w = w
 matchGreens ((i,c):xs) w = Set.intersection (Set.filter (\x -> B.index x i == c) w) (matchGreens xs w)
@@ -125,17 +97,6 @@ Takes a guess and returns a Set of valid possible words.
 -}
 possibleWords:: Main.Knowledge -> Set.Set B.ByteString -> Set.Set B.ByteString
 possibleWords k w = Set.intersection (Set.intersection (matchGreens (Set.toList (green k)) w) (matchYellows (Set.toList (yellow k)) w)) (matchGreys (Set.toList (grey k)) w)
-
-getYellowsHelper:: Int -> B.ByteString -> B.ByteString -> [(Int, Char)]
-getYellowsHelper pos g a
-   | g == B.empty = []
-   | B.head g `B.elem` (x `B.append` B.tail y) = (pos, B.head g): getYellowsHelper (pos+1) (B.tail g) a
-   | otherwise = getYellowsHelper (pos+1) (B.tail g) a
-   where (x, y) = B.splitAt pos a
-
-
--- getYellows:: B.ByteString -> B.ByteString -> [(Int, Char)]
--- getYellows = getYellowsHelper 0
 
 getYellows :: B.ByteString -> B.ByteString -> Set.Set (Int, Char)
 getYellows g a = l `Set.difference` getGreens g a
@@ -174,7 +135,7 @@ entropies :: Set.Set B.ByteString -> Knowledge -> [(B.ByteString, Float)]
 entropies gs k = e_list
    where g_list = Set.toList gs
          as = possibleWords k gs
-         e_list = map (\g -> (g, entropy g k as)) g_list `using` parBuffer 200 rdeepseq
+         e_list = map (\g -> (g, entropy g k as)) g_list `using` parList rdeepseq
 maxEntropyHelper :: (B.ByteString, Float) -> [(B.ByteString, Float)] -> (B.ByteString, Float)
 maxEntropyHelper m []  = m
 maxEntropyHelper (max_guess, max_entr) ((guess, entr):xs)
