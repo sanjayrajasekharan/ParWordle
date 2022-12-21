@@ -5,7 +5,9 @@ import qualified Data.ByteString.Char8 as B
 import qualified System.Environment as Env
 import qualified System.Exit as Exit
 import Data.Map (elemAt)
+import qualified Debug.Trace as T
 import Control.Parallel.Strategies
+
 
 
 data Word = Word { l1 :: Char
@@ -43,24 +45,24 @@ main = do
              k = initKnowledge
              startWB = B.pack startW
              ans = B.pack "slate"
-         let count =  play startWB ans k guesses 1
-         print count
-         -- let countList =  map (\x -> play startWB x k guesses 1) ansList
 
+         -- mapM_ (\x -> play startWB x k (Set.fromList ansList) guesses 1) ansList
+         play startWB ans k guesses 1
          -- let avg = fromIntegral (sum countList) / fromIntegral (length countList)
          -- print avg
          -- let countList =  map (\x -> play g x k p 1) wordList `using` parList rseq
          -- let avg = fromIntegral (sum countList) / fromIntegral (length countList)
          -- print avg
 
-play :: B.ByteString -> B.ByteString -> Knowledge -> List.Set B.ByteString -> Int -> Int
-play guess ans k possWords gCount
-   | newGuess == ans = gCount + 1
-   | otherwise = play newGuess ans newK possWords newCount
-   where newK = addToKnowledge k guess ans
-         wordSet = possibleWords newK possWords
-         newGuess = fst $ maxEntropy wordSet newK
-         newCount = gCount + 1
+play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString -> Int -> IO ()
+play g a k gs count
+   | g == a = do 
+      print $ B.unpack a ++ ": " ++ show count
+   | otherwise = T.trace (show count ++ show g) play g' a k' gs' (count+1)
+   where k' = addToKnowledge k g a
+         gs' = Set.delete g gs 
+         g' = fst $ maxEntropy gs' k'
+
 {- 
 Converts a ByteString to data Word. (Currently Not Using)
 -}
@@ -149,16 +151,19 @@ g is the guess, w is the set of possible words at this point
 count :: Ord a => [a] -> Map.Map a Float
 count = Map.fromListWith (+) . (`zip` repeat 1)
 
-entropy :: B.ByteString -> Set.Set B.ByteString -> Knowledge -> Float
-entropy g w k = Map.foldl (+) 0 $ Map.unionWith (*) p inf
-   where s = fromIntegral (length w)
-         p = Map.map (/s) $ count (map (addToKnowledge k g) (Set.toList w) `using` parList rseq)
+entropy :: B.ByteString -> Knowledge -> Set.Set B.ByteString ->Float
+entropy g k as = Map.foldl (+) 0 $ Map.unionWith (*) p inf
+   where l = fromIntegral (Set.size as)
+         p =  Map.map (/l) $ count (map (addToKnowledge k g) (Set.toList as))
+         -- `using` parList rseq)
          inf = Map.map (\x ->logBase 2 (1/x)) p
 
 entropies :: Set.Set B.ByteString -> Knowledge -> [(B.ByteString, Float)]
-entropies w k = e_list
-   where w_list = Set.toList w
-         e_list = map (\x -> (x, entropy x w k)) w_list `using` parList rdeepseq
+entropies gs k = e_list
+   where g_list = Set.toList gs
+         as = T.trace (show (possibleWords k gs)) possibleWords k gs
+         e_list = map (\g -> (g, entropy g k as)) g_list
+         -- `using` parList rdeepseq
 maxEntropyHelper :: (B.ByteString, Float) -> [(B.ByteString, Float)] -> (B.ByteString, Float)
 maxEntropyHelper m []  = m
 maxEntropyHelper (max_guess, max_entr) ((guess, entr):xs)
@@ -166,4 +171,7 @@ maxEntropyHelper (max_guess, max_entr) ((guess, entr):xs)
    | otherwise = maxEntropyHelper (max_guess, max_entr) xs
 
 maxEntropy :: Set.Set B.ByteString -> Knowledge ->  (B.ByteString, Float)
-maxEntropy w k = maxEntropyHelper (B.empty, -1) (entropies w k)
+maxEntropy gs k 
+   | Set.size as == 1 = (Set.elemAt 0 as, 0)
+   | otherwise = maxEntropyHelper (B.empty, -1) (entropies gs k)
+   where as = possibleWords k gs
