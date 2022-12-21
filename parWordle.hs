@@ -5,7 +5,7 @@ import qualified Data.ByteString.Char8 as B
 import qualified System.Environment as Env
 import qualified System.Exit as Exit
 import Data.Map (elemAt)
-import Control.Parallel.Strategies hiding (parMap)
+import Control.Parallel.Strategies
 
 
 data Word = Word { l1 :: Char
@@ -22,60 +22,45 @@ initKnowledge :: Knowledge
 initKnowledge = Knowledge Set.empty Set.empty Set.empty
 
 
-parMap :: (a -> b) -> [a] -> Eval [b] 
-parMap f [] = return []
-parMap f (a:as) = do
-   b <- rpar (f a) 
-   bs <- parMap f as 
-   return (b:bs)
-
 
 main :: IO ()
 main = do
-   a <- Env.getArgs
-   if length a /= 3 then do
+   args <- Env.getArgs
+   if length args /= 3 then do
       n <- Env.getProgName
-      Exit.die $ "Usage: " ++ n ++ "<initialGuess> <answer> <filename>"
+      Exit.die $ "Usage: " ++ n ++ "<initialGuess> <guess-filename> <answer-filename>"
    else do
-      let guess = head a
-      let answer = a !! 1
-      if length guess /= 5 || length answer /= 5 then do
-         Exit.die "Guess and Answer must be length 5"
+      let startW = head args
+      if length startW /= 5 then do
+         Exit.die "Starting guess must be length 5"
       else do
-         let file_name = a !! 2
-         f <- B.readFile file_name
-         let p = (getValidWords . B.words) f
+         let guessFile = args !! 1
+         let answerFile = args !! 2
+         guessF <- B.readFile guessFile
+         ansF <- B.readFile answerFile
+         let guesses = (getValidWords . B.words) guessF
+             ansList = Set.toList ((getValidWords . B.words) ansF)
              k = initKnowledge
-             g = B.pack guess
-             w = B.pack answer
-         let wordList = Set.toList p
-         let countList =  map (\x -> play g x k p 1) wordList `using` parList rseq
-         let avg = fromIntegral (sum countList) / fromIntegral (length countList)
-         print avg
+             startWB = B.pack startW
+             ans = B.pack "slate"
+         let count =  play startWB ans k guesses 1
+         print count
+         -- let countList =  map (\x -> play startWB x k guesses 1) ansList
 
-
-
--- play :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString-> IO ()
--- play g a k p = do
---    print $ B.unpack g
---    let newK = addToKnowledge k g a
---    let wordSet = possibleWords newK p
---    let newGuess = fst $ maxEntropy wordSet newK --this will be where we have to do minimax
---    if newGuess == a then do
---       print $ B.unpack newGuess
---       print "Word Found!"
---    else do
---       play newGuess a newK p
+         -- let avg = fromIntegral (sum countList) / fromIntegral (length countList)
+         -- print avg
+         -- let countList =  map (\x -> play g x k p 1) wordList `using` parList rseq
+         -- let avg = fromIntegral (sum countList) / fromIntegral (length countList)
+         -- print avg
 
 play :: B.ByteString -> B.ByteString -> Knowledge -> List.Set B.ByteString -> Int -> Int
-play g a k p count
-   | newGuess == a = count + 1
-   | otherwise = play newGuess a newK p newCount
-   where newK = addToKnowledge k g a
-         wordSet = possibleWords newK p
+play guess ans k possWords gCount
+   | newGuess == ans = gCount + 1
+   | otherwise = play newGuess ans newK possWords newCount
+   where newK = addToKnowledge k guess ans
+         wordSet = possibleWords newK possWords
          newGuess = fst $ maxEntropy wordSet newK
-         newCount = count + 1
-
+         newCount = gCount + 1
 {- 
 Converts a ByteString to data Word. (Currently Not Using)
 -}
@@ -167,14 +152,13 @@ count = Map.fromListWith (+) . (`zip` repeat 1)
 entropy :: B.ByteString -> Set.Set B.ByteString -> Knowledge -> Float
 entropy g w k = Map.foldl (+) 0 $ Map.unionWith (*) p inf
    where s = fromIntegral (length w)
-         p = Map.map (/s) $ count (map (addToKnowledge k g) (Set.toList w))
+         p = Map.map (/s) $ count (map (addToKnowledge k g) (Set.toList w) `using` parList rseq)
          inf = Map.map (\x ->logBase 2 (1/x)) p
 
 entropies :: Set.Set B.ByteString -> Knowledge -> [(B.ByteString, Float)]
 entropies w k = e_list
    where w_list = Set.toList w
-         e_list = map (\x -> (x, entropy x w k)) w_list `using` parListChunk 100 rdeepseq
-
+         e_list = map (\x -> (x, entropy x w k)) w_list `using` parList rdeepseq
 maxEntropyHelper :: (B.ByteString, Float) -> [(B.ByteString, Float)] -> (B.ByteString, Float)
 maxEntropyHelper m []  = m
 maxEntropyHelper (max_guess, max_entr) ((guess, entr):xs)
