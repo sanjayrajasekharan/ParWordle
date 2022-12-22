@@ -1,6 +1,5 @@
-import qualified Data.Set as Set
 import qualified Data.Map as Map
-import qualified Data.Set as List
+import qualified Data.Set as Set
 import qualified Data.ByteString.Char8 as B
 import qualified System.Environment as Env
 import qualified System.Exit as Exit
@@ -20,23 +19,27 @@ initKnowledge = Knowledge Set.empty Set.empty Set.empty
 main :: IO ()
 main = do
    args <- Env.getArgs
-   if length args /= 2 then do
+   if length args /= 3 then do
       n <- Env.getProgName
-      Exit.die $ "Usage: " ++ n ++ "<answer> <guesses-filename>"
+      Exit.die $ "Usage: " ++ n ++ "<answer> <guesses-filename> <ans-filename>"
    else do
       let startW = head args
       if length startW /= 5 then do
          Exit.die "Starting guess must be length 5"
       else do 
-         let (ans:guessFile:_) = args
+         let (ans:guessFile:ansFile:_) = args
          guessF <- B.readFile guessFile
+         ansF <- B.readFile ansFile
          let guesses = (getValidWords . B.words) guessF
-            --  ansList = Set.toList ((getValidWords . B.words) ansF)
+             ansList = Set.toList ((getValidWords . B.words) ansF)
              k = initKnowledge
              startWB = B.pack "raise"
              ansB = B.pack ans
+             res =  map (\x -> test startWB (T.trace (show x) x) k guesses 1) ansList
 
-         play startWB ansB k guesses 1
+         -- play startWB ansB k guesses 1
+         print $ fromIntegral (sum res) / fromIntegral (length res)
+
          -- let avg = fromIntegral (sum countList) / fromIntegral (length countList)
          -- print avg
          -- let countList = map (\x -> play startWB x k guesses 1) ansList
@@ -54,13 +57,13 @@ play g a k gs count = do
           g' = fst $ maxEntropy gs' k'
       play g' a k' gs' (count+1)
 
-{- 
-Converts a ByteString to data Word. (Currently Not Using)
--}
-buildWord:: B.ByteString -> Main.Word
-buildWord x
-    | B.length x == 5  = Main.Word (B.index x 0) (B.index x 1) (B.index x 2) (B.index x 3) (B.index x 4)
-    | otherwise = Main.BadGuess
+test :: B.ByteString -> B.ByteString -> Knowledge -> Set.Set B.ByteString -> Int -> Int
+test g a k gs count
+   | g==a = count
+   | otherwise = test g' a k' gs' (count+1)
+   where k' = addToKnowledge k g a
+         gs' = Set.delete g gs 
+         g' = fst $ maxEntropy gs' k'
 
 {-
 Converts a set of ByteStrings to a Set of words of length = 5.
@@ -145,5 +148,9 @@ maxEntropyHelper (max_guess, max_entr) ((guess, entr):xs)
 maxEntropy :: Set.Set B.ByteString -> Knowledge ->  (B.ByteString, Float)
 maxEntropy gs k 
    | Set.size as == 1 = (Set.elemAt 0 as, 0)
-   | otherwise = maxEntropyHelper (B.empty, -1) (entropies gs k)
+   -- | length ms /= 0 = head ms
+   | otherwise = m  
    where as = possibleWords k gs
+         e = entropies gs k
+         m = maxEntropyHelper (B.empty, -1) e
+         -- ms = filter (\(z,v) -> (v == snd m) && Set.member z as) e
